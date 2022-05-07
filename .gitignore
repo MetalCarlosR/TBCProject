@@ -6,6 +6,7 @@
 !.vscode/launch.json
 !.vscode/extensions.json
 ### Eclipse template
+artifacts/
 
 .metadata
 tmp/
