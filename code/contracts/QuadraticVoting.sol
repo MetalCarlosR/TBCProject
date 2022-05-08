@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.6;
 
+import "./VotingTokensERC20.sol";
+
 contract QuadraticVoting {
 
     // Proposal structure
@@ -19,6 +21,7 @@ contract QuadraticVoting {
     uint256 totalBudget;
     address owner;
     bool open;
+    VotingTokensERC20 erc20;
 
     mapping(address => bool) participants;
     mapping(address => uint256) tokens;
@@ -34,6 +37,7 @@ contract QuadraticVoting {
 
     uint256 currentId = 1;
 
+    
     // Mapping from Proposal id to votes from participant address
     mapping(uint256 => mapping(address => uint256)) votes;
 
@@ -44,6 +48,7 @@ contract QuadraticVoting {
         maxTokens = mTokens;
         owner = msg.sender;
         open = false;
+        erc20 = new VotingTokensERC20(owner);
     }
 
     // Modifier to check for owner
@@ -165,14 +170,9 @@ contract QuadraticVoting {
     }
 
 
-    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // Returns erc20 contract address
     function getERC20() public view returns (address) {
-        // TODO
-        return owner;
+        return address(erc20);
     }
 
     // Returns approved finantial proposals
