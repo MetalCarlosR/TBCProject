@@ -2,6 +2,7 @@
 pragma solidity ^0.8.6;
 
 import "./VotingTokensERC20.sol";
+import "../interfaces/IExecutableProposal.sol";
 
 contract QuadraticVoting {
 
@@ -14,6 +15,7 @@ contract QuadraticVoting {
         address contrAddr;
         uint256 votes;
         uint256 id;
+        bool approved;
     }
 
     uint256 tokenPrice;
@@ -24,12 +26,11 @@ contract QuadraticVoting {
     VotingTokensERC20 erc20;
 
     mapping(address => bool) participants;
-    mapping(address => uint256) tokens;
     mapping(uint256 => Proposal) proposals;
 
 
     // "NULL" Proposal for visual checking (not necessary but checking with "NULL" is easier)
-    Proposal NULL = Proposal("", "", 0, address(0), address(0), 0, 0);
+    Proposal NULL = Proposal("", "", 0, address(0), address(0), 0, 0, false);
 
     uint256[] pendingFinantial;
     uint256[] pendingSignaling;
@@ -78,6 +79,24 @@ contract QuadraticVoting {
         _;
     }
 
+    // Modifier to check if proposal exist
+    modifier existingProposal(uint id) {
+        require(
+            proposals[id].contrAddr != NULL.contrAddr,
+            "Non existing proposal"
+        );
+        _;
+    }
+
+    // Modifier to check if proposal is not approved yet
+    modifier notApproved(uint id) {
+        require(
+            proposals[id].approved == false ,
+            "Only participants can access this function"
+        );
+        _;
+    }
+
     // Modifier to check if poll is open
     modifier isOpen() {
         require(open, "Voting not open");
@@ -100,7 +119,7 @@ contract QuadraticVoting {
 
         uint256 numTokens = msg.value / tokenPrice;
         participants[msg.sender] = true;
-        tokens[msg.sender] = numTokens;
+        erc20.addTokens(msg.sender, numTokens);
 
         uint256 remainder = msg.value % tokenPrice;
         payable(msg.sender).transfer(remainder);
@@ -123,7 +142,8 @@ contract QuadraticVoting {
             msg.sender,
             contrAddr,
             0,
-            currentId
+            currentId,
+            false
         );
         proposals[currentId] = newProposal;
         if (budget > 0) pendingFinantial.push(currentId);
@@ -136,10 +156,9 @@ contract QuadraticVoting {
     // TODO TODO TODO TODO TODO TODO TODO TODO TODO
     // TODO TODO TODO TODO TODO TODO TODO TODO TODO
     // TODO TODO TODO TODO TODO TODO TODO TODO TODO
-    function cancelProposal(uint256 id) public isOpen existingParticipant {
+    function cancelProposal(uint256 id) public isOpen existingParticipant existingProposal(id) notApproved(id) {
         Proposal storage p = proposals[id];
 
-        if (p.owner == NULL.owner) revert("No proposal with that id");
         if (p.owner != msg.sender)
             revert("You can't close a proposal that isn't yours");
 
@@ -152,19 +171,21 @@ contract QuadraticVoting {
             revert("You need to send ether to purchase 1 token");
 
         uint256 numTokens = msg.value / tokenPrice;
-        tokens[msg.sender] += numTokens;
+        erc20.addTokens(msg.sender, numTokens);
 
         uint256 remainder = msg.value % tokenPrice;
         payable(msg.sender).transfer(remainder);
     }
 
     function sellTokens() public existingParticipant {
-        if (tokens[msg.sender] == 0)
+        uint numTokens = erc20.balanceOf(msg.sender);
+
+        if (numTokens == 0)
             revert("No tokens to sell in your account");
 
-        uint256 amount = tokens[msg.sender] * tokenPrice;
+        uint256 amount = numTokens * tokenPrice;
 
-        tokens[msg.sender] = 0;
+        erc20.eraseBalance(msg.sender);
 
         payable(msg.sender).transfer(amount);
     }
@@ -173,6 +194,17 @@ contract QuadraticVoting {
     // Returns erc20 contract address
     function getERC20() public view returns (address) {
         return address(erc20);
+    }
+
+
+    // Returns pending finantial proposals
+    function getPendingProposals()
+        public
+        view
+        isOpen
+        returns (uint256[] memory)
+    {
+        return pendingFinantial;
     }
 
     // Returns approved finantial proposals
@@ -203,14 +235,58 @@ contract QuadraticVoting {
         public
         view
         isOpen
+        existingProposal(id)
         returns (Proposal memory)
     {
-        Proposal storage p = proposals[id];
-        if (p.owner == NULL.owner) revert("No proposal with that id");
-        return p;
+        return proposals[id];
     }
 
+
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    function stake(uint id, uint votesN) external isOpen existingParticipant existingProposal(id) notApproved(id) {
+        uint v = votes[id][msg.sender];
+        uint tokens = tokenQuadratic(v + 1, v + votesN);
+        require(tokens <= erc20.balanceOf(msg.sender), "Not enough tokens to make that vote");
+        
+        erc20.adminTrasnfer(msg.sender, tokens);
+        
+        votes[id][msg.sender] += votesN;
+        proposals[id].votes += votesN;
+        totalBudget += tokensToEther(tokens);
+
+
+        // TODO CHECK IF ITS APPROVED
+    }
+
+    function withdrawFromProposal(uint id, uint votesN) external isOpen existingParticipant existingProposal(id) notApproved(id) {
+        uint v = votes[id][msg.sender];
+
+        require(v >= votesN , "You can't withdraw more votes than you have deposit");
+
+        uint tokens = tokenQuadratic(v - votesN + 1, v);
+        
+        votes[id][msg.sender] -= votesN;
+        erc20.transfer(msg.sender, tokens);
+        
+        proposals[id].votes -= votesN;
+        totalBudget -= tokensToEther(tokens);
+    }
     
 
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO
+    function tokenQuadratic(uint firstVote, uint lastVote) private view returns (uint) {
+        return firstVote * lastVote;
+    }
 
+    function tokensToEther(uint n) private view returns (uint) {
+        return n * tokenPrice;
+    }
 }
